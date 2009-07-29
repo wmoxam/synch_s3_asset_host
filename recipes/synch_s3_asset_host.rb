@@ -154,21 +154,28 @@ require 'yaml'
 
 RAILS_ROOT = File.join(File.dirname(__FILE__), "../../../..")
 NUM_ASSET_HOSTS = 4
-CONFIG_FILENAME = File.join(File.dirname(__FILE__), "../../../..", 'config', 'synch_s3_asset_host.yml')
+
+CONFIG_FILENAME = if fetch(:stage) # multistage!
+  "synch_s3_asset_host.#{fetch(:stage)}.yml"
+else
+  "synch_s3_asset_host.yml"
+end
+
+CONFIG_PATH = File.join(RAILS_ROOT, 'config', CONFIG_FILENAME)
 
 def asset_hosts
   (0 ... NUM_ASSET_HOSTS).collect {|n| fetch(:asset_host_name) % n }.uniq
-end 
+end
 
 namespace :s3_asset_host do
-  
+
   task :default do
     synch_public
   end
-  
+
   desc "Loads the S3 id and secret from the .yaml file set in CONFIG_FILENAME"
   task :load_config do
-    s3sync_config = YAML::load(File.open(CONFIG_FILENAME))
+    s3sync_config = YAML::load(File.open(CONFIG_PATH))
     s3sync_config.each do |key, value|
       set(key.downcase.to_sym, value)
     end
@@ -180,11 +187,11 @@ namespace :s3_asset_host do
     current_release_dir = fetch(:latest_release)
     asset_hosts.each do |host|
       command = "cd #{File.join(current_release_dir, 'vendor/plugins/synch_s3_asset_host/s3sync')} && "
-      command += "./s3sync.rb --recursive --config-file #{File.join(current_release_dir, "config/synch_s3_asset_host.yml")} "
+      command += "./s3sync.rb --recursive --config-file #{File.join(current_release_dir, "config/#{CONFIG_FILENAME}")} "
       # command += "--exclude \"\\.svn|\\.DS_Store\" --public-read "
-      command += "--exclude \"\\.svn|\\.DS_Store|system\" --public-read "      
+      command += "--exclude \"\\.svn|\\.DS_Store|system\" --public-read "
       command += "--dryrun " if fetch(:dry_run, false)
-      command += "#{File.join(current_release_dir, 'public')}/ #{host}:" 
+      command += "#{File.join(current_release_dir, 'public')}/ #{host}:"
       run(command)
     end
   end
@@ -195,19 +202,19 @@ namespace :s3_asset_host do
     current_release_dir = fetch(:latest_release)
     asset_hosts.each do |host|
       command = "cd #{File.join(current_release_dir, 'vendor/plugins/synch_s3_asset_host/s3sync')} && "
-      command += "./s3sync.rb --recursive --config-file #{File.join(current_release_dir, "config/synch_s3_asset_host.yml")} "
+      command += "./s3sync.rb --recursive --config-file #{File.join(current_release_dir, "config/#{CONFIG_FILENAME}")} "
       # command += "--exclude \"\\.svn|\\.DS_Store\" --public-read "
-      command += "--exclude \"\\.svn|\\.DS_Store|system\" --public-read "      
+      command += "--exclude \"\\.svn|\\.DS_Store|system\" --public-read "
       command += "--dryrun " if fetch(:dry_run, false)
-      command += "#{File.join(current_release_dir, 'public/javascripts/cache')}/ #{host}:javascripts/cache" 
+      command += "#{File.join(current_release_dir, 'public/javascripts/cache')}/ #{host}:javascripts/cache"
       run(command)
     end
 
     asset_hosts.each do |host|
       command = "cd #{File.join(current_release_dir, 'vendor/plugins/synch_s3_asset_host/s3sync')} && "
-      command += "./s3sync.rb --recursive --config-file #{File.join(current_release_dir, "config/synch_s3_asset_host.yml")} "
+      command += "./s3sync.rb --recursive --config-file #{File.join(current_release_dir, "config/#{CONFIG_FILENAME}")} "
       # command += "--exclude \"\\.svn|\\.DS_Store\" --public-read "
-      command += "--exclude \"\\.svn|\\.DS_Store|system\" --public-read "      
+      command += "--exclude \"\\.svn|\\.DS_Store|system\" --public-read "
       command += "--dryrun " if fetch(:dry_run, false)
       command += "#{File.join(current_release_dir, 'public/stylesheets/compiled_*')} #{host}:stylesheets/"
       run(command)
@@ -219,33 +226,33 @@ namespace :s3_asset_host do
   task :reset_and_synch do
     connect
     delete_all
-    synch_public  
+    synch_public
   end
-  
+
   desc "An alias for create_buckets"
   task :setup do
     create_buckets
   end
-  
+
   desc "Creates all of your asset host buckets"
-  task :create_buckets do   
+  task :create_buckets do
     connect 
     asset_hosts.each do |host|
-      puts "#{'DRY RUN: ' if fetch(:dry_run, false)}creating bucket #{host}"            
+      puts "#{'DRY RUN: ' if fetch(:dry_run, false)}creating bucket #{host}"
       AWS::S3::Bucket.create(host, :force => true) unless fetch(:dry_run, false)
     end
   end
-  
+
   desc "Deletes and then re-creates all of your asset host buckets"
   task :delete_all do
     connect
     asset_hosts.each do |host|
-      puts "#{'DRY RUN: ' if fetch(:dry_run, false)}Deleting bucket #{host} and all of its contents"      
+      puts "#{'DRY RUN: ' if fetch(:dry_run, false)}Deleting bucket #{host} and all of its contents"
       AWS::S3::Bucket.delete(host, :force => true) unless fetch(:dry_run, false)
     end
     create_buckets
   end
-  
+
   desc "Connects to your Amazon S3 instance.  See the documentation for how to provide your " +
        "credentials for Amazon S3."
   task :connect do
@@ -255,8 +262,8 @@ namespace :s3_asset_host do
           :access_key_id     => fetch(:aws_access_key_id, nil),
           :secret_access_key => fetch(:aws_secret_access_key, nil)
         )
-    end  
-    raise "\nERROR: Connection to Amazon S3 not made or bad access key or bad secret access key.  Exiting" unless AWS::S3::Base.connected?     
+    end
+    raise "\nERROR: Connection to Amazon S3 not made or bad access key or bad secret access key.  Exiting" unless AWS::S3::Base.connected?
   end
-  
+
 end
