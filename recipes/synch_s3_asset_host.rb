@@ -155,14 +155,6 @@ require 'yaml'
 RAILS_ROOT = File.join(File.dirname(__FILE__), "../../../..")
 NUM_ASSET_HOSTS = 4
 
-CONFIG_FILENAME = if fetch(:stage) # multistage!
-  "synch_s3_asset_host.#{fetch(:stage)}.yml"
-else
-  "synch_s3_asset_host.yml"
-end
-
-CONFIG_PATH = File.join(RAILS_ROOT, 'config', CONFIG_FILENAME)
-
 def asset_hosts
   (0 ... NUM_ASSET_HOSTS).collect {|n| fetch(:asset_host_name) % n }.uniq
 end
@@ -173,9 +165,22 @@ namespace :s3_asset_host do
     synch_public
   end
 
+  desc "Set the config file name"
+  task :set_config do
+    begin # multistage!
+      set(:config_filename, "synch_s3_asset_host.#{fetch(:stage)}.yml")
+    rescue IndexError
+      puts "Using default filename"
+      set(:config_filename, "synch_s3_asset_host.yml")
+    end
+
+    set(:config_path, File.join(RAILS_ROOT, 'config', fetch(:config_filename)))
+  end
+
   desc "Loads the S3 id and secret from the .yaml file set in CONFIG_FILENAME"
   task :load_config do
-    s3sync_config = YAML::load(File.open(CONFIG_PATH))
+    set_config
+    s3sync_config = YAML::load(File.open(fetch(:config_path)))
     s3sync_config.each do |key, value|
       set(key.downcase.to_sym, value)
     end
@@ -187,7 +192,7 @@ namespace :s3_asset_host do
     current_release_dir = fetch(:latest_release)
     asset_hosts.each do |host|
       command = "cd #{File.join(current_release_dir, 'vendor/plugins/synch_s3_asset_host/s3sync')} && "
-      command += "./s3sync.rb --recursive --config-file #{File.join(current_release_dir, "config/#{CONFIG_FILENAME}")} "
+      command += "./s3sync.rb --recursive --config-file #{File.join(current_release_dir, "config/#{fetch(:config_filename)}")} "
       # command += "--exclude \"\\.svn|\\.DS_Store\" --public-read "
       command += "--exclude \"\\.svn|\\.DS_Store|system\" --public-read "
       command += "--dryrun " if fetch(:dry_run, false)
@@ -202,7 +207,7 @@ namespace :s3_asset_host do
     current_release_dir = fetch(:latest_release)
     asset_hosts.each do |host|
       command = "cd #{File.join(current_release_dir, 'vendor/plugins/synch_s3_asset_host/s3sync')} && "
-      command += "./s3sync.rb --recursive --config-file #{File.join(current_release_dir, "config/#{CONFIG_FILENAME}")} "
+      command += "./s3sync.rb --recursive --config-file #{File.join(current_release_dir, "config/#{fetch(:config_filename)}")} "
       # command += "--exclude \"\\.svn|\\.DS_Store\" --public-read "
       command += "--exclude \"\\.svn|\\.DS_Store|system\" --public-read "
       command += "--dryrun " if fetch(:dry_run, false)
@@ -212,7 +217,7 @@ namespace :s3_asset_host do
 
     asset_hosts.each do |host|
       command = "cd #{File.join(current_release_dir, 'vendor/plugins/synch_s3_asset_host/s3sync')} && "
-      command += "./s3sync.rb --recursive --config-file #{File.join(current_release_dir, "config/#{CONFIG_FILENAME}")} "
+      command += "./s3sync.rb --recursive --config-file #{File.join(current_release_dir, "config/#{fetch(:config_filename)}")} "
       # command += "--exclude \"\\.svn|\\.DS_Store\" --public-read "
       command += "--exclude \"\\.svn|\\.DS_Store|system\" --public-read "
       command += "--dryrun " if fetch(:dry_run, false)
@@ -265,5 +270,4 @@ namespace :s3_asset_host do
     end
     raise "\nERROR: Connection to Amazon S3 not made or bad access key or bad secret access key.  Exiting" unless AWS::S3::Base.connected?
   end
-
 end
